@@ -12,11 +12,42 @@ const Chat = () => {
   ]);
   const [input, setInput] = useState('');
   const [step, setStep] = useState(1);
+  const [recording, setRecording] = useState(false)
   const [userData, setUserData] = useState({ diet: '', selectedMeal: '', selectedRestaurant: '', schedule: '', userPlan: '' });
   const messagesEndRef = useRef(null);
 
   const newMessage = (sender, message) => {
     setMessages((prev) => [...prev, { sender, message }]);
+  };
+
+  const saveFavorite = (meal) => {
+    const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+    favorites.push(meal);
+    localStorage.setItem('favorites', JSON.stringify(favorites));
+  };
+
+  const showFavorites = () => {
+    const favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+    if (favorites.length === 0) {
+      newMessage('bot', 'You have no favorite meals saved.');
+    } else {
+      newMessage('bot', 'Your favorite meals:');
+      favorites.forEach((meal, index) => newMessage('bot', `${index + 1}. ${meal}`));
+    }
+  };
+
+  const getUserLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude } = position.coords;
+        console.log("User location:", latitude, longitude);
+        newMessage('bot', `Your location: Latitude ${latitude}, Longitude ${longitude}`);
+      }, () => {
+        newMessage('bot', 'Location access denied.');
+      });
+    } else {
+      newMessage('bot', 'Geolocation is not supported by your browser.');
+    }
   };
 
   const generateAIResponse = async (prompt) => {
@@ -36,7 +67,7 @@ const Chat = () => {
   };
 
   const localMeals = {
-    swallow: ["Fufu", "Eba", "Poundo", "Semo", "Wheat", "Corn", "Cocoyam", "Wheat"],
+    swallow: ["Fufu", "Eba", "Poundo", "Semo", "Wheat", "Corn", "Cocoyam"],
     'Low-Carb': ['Grilled Catfish & Veggies', 'Pepper Soup'],
     soup: ["Efo Eriro", "Ewedu", "oha", "afang", "vegetable sauce", "Banga", "Edikangikong", "Gbegiri"],
     rice: ["ofada rice", "Jollof Rice", "Fried Rice", "Coconut Rice"],
@@ -58,6 +89,16 @@ const Chat = () => {
     if (!input.trim()) return;
     const userInput = input.trim();
     newMessage('user', userInput);
+
+    if (userInput.toLowerCase() === 'favorites') {
+      showFavorites();
+      setInput('');
+      return;
+    } else if (userInput.toLowerCase() === 'location') {
+      getUserLocation();
+      setInput('');
+      return;
+    }
 
     switch (step) {
       case 1:
@@ -114,6 +155,7 @@ const Chat = () => {
           : userInput;
         setUserData((prev) => ({ ...prev, selectedMeal: selected }));
         newMessage('bot', `Great choice! "${selected}" sounds tasty.`);
+        saveFavorite(selected);
         newMessage('bot', 'Which restaurant would you like it from? Choose by number or type the name.');
         setStep(4);
         break;
@@ -174,56 +216,109 @@ const Chat = () => {
     }
   };
 
+ const handleVoiceInput = () => {
+    if ('webkitSpeechRecognition' in window) {
+      const recognition = new window.webkitSpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      setRecording(true);
+      recognition.start();
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+        setRecording(false);
+      };
+
+       recognition.onerror = () => {
+        setRecording(false);
+      };
+
+      recognition.onend = () => {
+        setRecording(false);
+      };
+    } else {
+      alert('Voice input not supported in this browser');
+    }
+  };
+
+
+
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   return (
-    <div className='flex flex-col justify-center items-center min-h-screen p-4 sm:p-6 lg:p-10 border border-blue-400 rounded-2xl relative'>
-  <div className='flex flex-col w-full max-w-3xl h-[calc(100vh-150px)] overflow-y-auto mb-20 px-2 sm:px-4'>
-    {messages.map((msg, idx) => (
-      <div key={idx} className={`flex ${msg.sender === 'bot' ? 'justify-start' : 'justify-end'} w-full`}>
-        <div
-          className={`${
-            msg.sender === 'bot'
-              ? 'bg-[#9ACBD0] text-blue-950'
-              : 'bg-[#EFEFEF] border text-gray-600 border-blue-800'
-          } p-2 m-2 text-sm sm:text-[14px] rounded-lg max-w-[85%] whitespace-pre-line`}
-        >
-          {msg.message}
+    <div className='flex flex-col text-gray-300 justify-center items-center min-h-screen p-4 sm:p-6 lg:p-10 border border-blue-400 rounded-2xl relative'>
+      {recording && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-100 text-yellow-800 px-4 py-2 rounded shadow">
+          🎙️ Listening...
         </div>
+      )}
+      <div className='flex flex-col w-full max-w-3xl h-[calc(100vh-150px)] overflow-y-auto mb-20 px-2 sm:px-4'>
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`flex ${msg.sender === 'bot' ? 'justify-start' : 'justify-end'} w-full`}>
+            {msg.sender === 'bot' && (
+              <img src='/bot-avatar.png' alt='Bot' className='w-8 h-8 rounded-full m-2' />
+            )}
+            <div
+              className={`$ {
+                msg.sender === 'bot'
+                  ? 'bg-[#9ACBD0] text-blue-950'
+                  : 'bg-[#EFEFEF] border text-gray-300 border-blue-800'
+              } p-2 m-2 text-sm sm:text-[14px] rounded-lg max-w-[85%] whitespace-pre-line`}
+            >
+              {msg.message}
+            </div>
+            {msg.sender === 'user' && (
+              <img src='/user-avatar.png' alt='User' className='w-8 h-8 rounded-full m-2' />
+            )}
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
       </div>
-    ))}
-    <div ref={messagesEndRef} />
-  </div>
 
- <div className='absolute bottom-2 sm:bottom-4  w-full max-w-3xl  px-2 sm:px-4'>
-  <form
-    onSubmit={(e) => {
-      e.preventDefault();
-      handleSend();
-    }}
-    className='flex items-center gap-2'
-  >
-    <input
-      type='text'
-      value={input}
-      onChange={(e) => setInput(e.target.value)}
-      onKeyDown={handleKeyDown}
-      placeholder='Enter your message'
-      className='flex-1  px-4 py-2 rounded-lg border border-gray-300 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-400'
-    />
-    <button
-      type='submit'
-      className='p-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition'
-    >
-      <BsSendFill className='text-lg' />
-    </button>
-  </form>
-</div>
-
-</div>
-
+      <div className='absolute bottom-2 sm:bottom-4 w-full max-w-3xl px-2 sm:px-4'>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className='flex items-center gap-2'
+        >
+          <input
+            type='text'
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder='Enter your message'
+            className='flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-400'
+          />
+          <button
+            type='button'
+            onClick={handleVoiceInput}
+            className='p-2.5 rounded-lg bg-green-600 text-white hover:bg-green-700 transition'
+          >
+            🎤
+          </button>
+          <button
+            type='submit'
+            className='p-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition'
+          >
+            <BsSendFill className='text-lg' />
+          </button>
+        </form>
+        <button
+          onClick={showFavorites}
+          className='mt-2 w-full text-sm text-blue-700 underline'
+        >
+          ⭐ View Favorites
+        </button>
+      </div>
+    </div>
   );
 };
 
